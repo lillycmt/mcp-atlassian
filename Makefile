@@ -17,9 +17,6 @@ ECS_SERVICE ?= mcp-atlassian
 SERVICE_VERSION ?= $(shell git rev-parse --short HEAD)
 IMAGE_NAME = $(SERVICE_NAME):$(SERVICE_VERSION)
 IMAGE_FULL_NAME = $(ECR_URI):$(SERVICE_VERSION)
-# Mutable tag for easy redeployment (can be overwritten)
-MUTABLE_TAG ?= latest
-IMAGE_MUTABLE_NAME = $(ECR_URI):$(MUTABLE_TAG)
 
 ## container: Build the Docker image
 container: auth
@@ -40,8 +37,6 @@ auth:
 docker-push: container
 	@echo "🏷️  Tagging image with commit hash $(SERVICE_VERSION)..."
 	docker tag $(IMAGE_NAME) $(IMAGE_FULL_NAME)
-	@echo "🏷️  Tagging image with mutable tag $(MUTABLE_TAG)..."
-	docker tag $(IMAGE_NAME) $(IMAGE_MUTABLE_NAME)
 	@echo "🚀 Pushing to ECR..."
 	@echo "   Pushing commit hash tag (may skip if already exists)..."
 	@output=$$(docker push $(IMAGE_FULL_NAME) 2>&1) || { \
@@ -52,11 +47,8 @@ docker-push: container
 			exit 1; \
 		fi \
 	}
-	@echo "   Pushing mutable tag $(MUTABLE_TAG)..."
-	docker push $(IMAGE_MUTABLE_NAME)
 	@echo "✅ Successfully pushed:"
 	@echo "   - $(IMAGE_FULL_NAME) (immutable, may already exist)"
-	@echo "   - $(IMAGE_MUTABLE_NAME) (mutable, always updated)"
 
 ## deploy-local: Update ECS service to use the new image (manual deploy)
 deploy-local: docker-push
