@@ -16,6 +16,7 @@ from mcp_atlassian.utils.logging import (
 )
 from mcp_atlassian.utils.oauth import configure_oauth_session
 from mcp_atlassian.utils.ssl import configure_ssl_verification
+from mcp_atlassian.utils.urls import build_atlassian_base_url
 
 from .config import JiraConfig
 
@@ -71,6 +72,19 @@ class JiraClient:
                 cloud=True,  # OAuth is only for Cloud
                 verify_ssl=self.config.ssl_verify,
             )
+            
+            # CRITICAL: For OAuth (which uses scoped gateway), override internal URL storage
+            # to ensure all internal calls use the gateway URL, not the classic site URL.
+            logger.debug(
+                f"OAuth mode: Overriding Jira client internal URL storage. "
+                f"Setting url to: {api_url}"
+            )
+            self.jira.url = api_url
+            # Try to override _options["server"] if it exists (some versions of the library use this)
+            if hasattr(self.jira, "_options") and isinstance(self.jira._options, dict):
+                self.jira._options["server"] = api_url
+                logger.debug(f"Also set _options['server'] to: {api_url}")
+            logger.debug(f"Jira client URL after override: {self.jira.url}")
         elif self.config.auth_type == "pat":
             logger.debug(
                 f"Initializing Jira client with Token (PAT) auth. "
@@ -84,19 +98,48 @@ class JiraClient:
                 verify_ssl=self.config.ssl_verify,
             )
         else:  # basic auth
+            # Build the base URL - use scoped token URL if enabled, otherwise use classic URL
+            if self.config.scoped_token_mode:
+                base_url = build_atlassian_base_url(
+                    product="jira",
+                    scoped_token_mode=True,
+                    cloud_id=self.config.cloud_id,
+                    classic_url=None,
+                )
+            else:
+                base_url = self.config.url
+
             logger.debug(
                 f"Initializing Jira client with Basic auth. "
-                f"URL: {self.config.url}, Username: {self.config.username}, "
+                f"URL: {base_url}, Username: {self.config.username}, "
                 f"API Token present: {bool(self.config.api_token)}, "
-                f"Is Cloud: {self.config.is_cloud}"
+                f"Is Cloud: {self.config.is_cloud}, "
+                f"Scoped Token Mode: {self.config.scoped_token_mode}"
             )
             self.jira = Jira(
-                url=self.config.url,
+                url=base_url,
                 username=self.config.username,
                 password=self.config.api_token,
                 cloud=self.config.is_cloud,
                 verify_ssl=self.config.ssl_verify,
             )
+            
+            # CRITICAL: For scoped tokens, override internal URL storage to ensure
+            # all internal calls use the gateway URL, not the classic site URL.
+            # The atlassian-python-api library sometimes reconstructs URLs from
+            # self.url or _options["server"], so we must override both.
+            if self.config.scoped_token_mode:
+                logger.debug(
+                    f"Scoped token mode: Overriding Jira client internal URL storage. "
+                    f"Setting url to: {base_url}"
+                )
+                self.jira.url = base_url
+                # Try to override _options["server"] if it exists (some versions of the library use this)
+                if hasattr(self.jira, "_options") and isinstance(self.jira._options, dict):
+                    self.jira._options["server"] = base_url
+                    logger.debug(f"Also set _options['server'] to: {base_url}")
+                logger.debug(f"Jira client URL after override: {self.jira.url}")
+            
             logger.debug(
                 f"Jira client initialized. Session headers (Authorization masked): "
                 f"{get_masked_session_headers(dict(self.jira._session.headers))}"

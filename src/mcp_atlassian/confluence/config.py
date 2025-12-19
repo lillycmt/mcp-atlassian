@@ -36,6 +36,8 @@ class ConfluenceConfig:
     no_proxy: str | None = None  # Comma-separated list of hosts to bypass proxy
     socks_proxy: str | None = None  # SOCKS proxy URL (optional)
     custom_headers: dict[str, str] | None = None  # Custom HTTP headers
+    scoped_token_mode: bool = False  # Whether to use scoped token mode (api.atlassian.com/ex/...)
+    cloud_id: str | None = None  # Cloud ID (required when scoped_token_mode is True)
 
     @property
     def is_cloud(self) -> bool:
@@ -127,6 +129,24 @@ class ConfluenceConfig:
         # Custom headers - service-specific only
         custom_headers = get_custom_headers("CONFLUENCE_CUSTOM_HEADERS")
 
+        # Scoped token mode configuration
+        scoped_token_mode = os.getenv("ATLASSIAN_SCOPED_TOKEN", "false").lower() == "true"
+        cloud_id = os.getenv("ATLASSIAN_CLOUD_ID")
+
+        # Validate scoped token configuration
+        if scoped_token_mode and not cloud_id:
+            raise ValueError(
+                "ATLASSIAN_SCOPED_TOKEN is enabled but ATLASSIAN_CLOUD_ID is missing"
+            )
+
+        # Log scoped token mode status
+        if scoped_token_mode:
+            config_logger = logging.getLogger("mcp-atlassian.confluence.config")
+            config_logger.info(
+                f"Scoped token mode enabled. Cloud ID: {cloud_id}, "
+                f"Base URL will be: https://api.atlassian.com/ex/confluence/{cloud_id}/wiki/rest/api"
+            )
+
         return cls(
             url=url,
             auth_type=auth_type,
@@ -141,6 +161,8 @@ class ConfluenceConfig:
             no_proxy=no_proxy,
             socks_proxy=socks_proxy,
             custom_headers=custom_headers,
+            scoped_token_mode=scoped_token_mode,
+            cloud_id=cloud_id,
         )
 
     def is_auth_configured(self) -> bool:

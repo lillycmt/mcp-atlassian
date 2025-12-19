@@ -114,6 +114,14 @@ class SearchMixin(JiraClient, IssueOperationsProto):
                     )
 
                 # Call 2: Get the actual issues using the enhanced method
+                # Log the Jira client base URL to debug scoped token routing issues
+                server_url = "N/A"
+                if hasattr(self.jira, "_options") and isinstance(self.jira._options, dict):
+                    server_url = self.jira._options.get("server", "N/A")
+                logger.debug(
+                    f"JIRA BASE URL before search: {self.jira.url}, "
+                    f"_options['server']: {server_url}"
+                )
                 issues_response_list = self.jira.enhanced_jql_get_list_of_tickets(
                     jql, fields=fields_param, limit=limit, expand=expand
                 )
