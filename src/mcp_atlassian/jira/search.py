@@ -89,7 +89,16 @@ class SearchMixin(JiraClient, IssueOperationsProto):
                 actual_total = -1
                 try:
                     # Call 1: Get metadata (including total) using standard search API
-                    metadata_params = {"jql": jql, "maxResults": 0}
+                    # For scoped tokens, use API v3; otherwise use the library's resource_url
+                    if self.config.scoped_token_mode:
+                        # Use API v3 for scoped tokens (v2 has been deprecated)
+                        metadata_params = {"jql": jql, "maxResults": 0}
+                        metadata_response = self.jira.get(
+                            "rest/api/3/search", params=metadata_params
+                        )
+                    else:
+                        # For classic mode, use the library's resource_url
+                        metadata_params = {"jql": jql, "maxResults": 0}
                     metadata_response = self.jira.get(
                         self.jira.resource_url("search"), params=metadata_params
                     )

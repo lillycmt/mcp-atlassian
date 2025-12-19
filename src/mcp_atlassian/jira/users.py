@@ -40,7 +40,11 @@ class UsersMixin(JiraClient):
             logger.debug(
                 "Calling self.jira.myself() to get current user details for account ID."
             )
-            myself_data = self.jira.myself()
+            # For scoped token mode, use API v3 directly; otherwise use library method
+            if self.config.scoped_token_mode:
+                myself_data = self.jira.get("rest/api/3/myself")
+            else:
+                myself_data = self.jira.myself()
 
             if not isinstance(myself_data, dict):
                 error_msg = "Failed to get user data: response was not a dictionary."
@@ -175,7 +179,18 @@ class UsersMixin(JiraClient):
             Optional[str]: Account ID if found, None otherwise.
         """
         try:
-            url = f"{self.config.url}/rest/api/2/user/permission/search"
+            # For scoped tokens, use the gateway URL and API v3; otherwise use classic URL and v2
+            if self.config.scoped_token_mode:
+                from mcp_atlassian.utils.urls import build_atlassian_base_url
+                base_url = build_atlassian_base_url(
+                    product="jira",
+                    scoped_token_mode=True,
+                    cloud_id=self.config.cloud_id,
+                    classic_url=None,
+                )
+                url = f"{base_url}/rest/api/3/user/permission/search"
+            else:
+                url = f"{self.config.url}/rest/api/2/user/permission/search"
             params = {"query": username, "permissions": "BROWSE"}
 
             auth = None

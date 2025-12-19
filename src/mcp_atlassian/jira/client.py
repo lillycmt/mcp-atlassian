@@ -196,7 +196,15 @@ class JiraClient:
             logger.debug(
                 "Testing Jira authentication by retrieving current user info..."
             )
-            current_user = self.jira.myself()
+            # For scoped token mode, we need to use API v3 and the gateway URL
+            # The library's myself() method may use v2 or the classic URL, so we call directly
+            if self.config.scoped_token_mode:
+                # Use direct API call with API v3 for scoped tokens
+                current_user = self.jira.get("rest/api/3/myself")
+            else:
+                # For classic mode, use the library's myself() method
+                current_user = self.jira.myself()
+            
             if current_user:
                 logger.info(
                     f"Jira authentication successful. "
