@@ -109,6 +109,18 @@ class ConfluenceClient:
                 verify_ssl=self.config.ssl_verify,
             )
             
+            # CRITICAL FIX: Manually set Basic Auth on the session if the library didn't set it
+            # The atlassian-python-api library sometimes fails to set Authorization headers
+            # This is especially important for scoped API tokens
+            if self.config.username and self.config.api_token:
+                from requests.auth import HTTPBasicAuth
+                self.confluence._session.auth = HTTPBasicAuth(
+                    self.config.username, self.config.api_token
+                )
+                logger.debug(
+                    f"Manually set Basic Auth on session for username: {self.config.username}"
+                )
+            
             # CRITICAL: For scoped tokens, override internal URL storage to ensure
             # all internal calls use the gateway URL, not the classic site URL.
             # The atlassian-python-api library sometimes reconstructs URLs from
