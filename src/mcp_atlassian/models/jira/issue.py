@@ -267,7 +267,51 @@ class JiraIssue(ApiModel, TimestampMixin):
         issue_id = str(data.get("id", JIRA_DEFAULT_ID))
         key = str(data.get("key", JIRA_DEFAULT_KEY))
         summary = str(fields.get("summary", EMPTY_STRING))
-        description = fields.get("description")
+        
+        # Handle description - can be string, ADF dict, or None
+        description_raw = fields.get("description")
+        description = None
+        if description_raw is not None:
+            if isinstance(description_raw, dict):
+                # Handle Atlassian Document Format (ADF)
+                # ADF structure: {'type': 'doc', 'version': 1, 'content': [...]}
+                # Extract text content from ADF nodes recursively
+                def extract_text_from_adf(node: Any) -> str:
+                    """Recursively extract text from ADF structure."""
+                    if isinstance(node, str):
+                        return node
+                    if isinstance(node, dict):
+                        node_type = node.get("type", "")
+                        # If it's a text node, get the text
+                        if node_type == "text":
+                            return node.get("text", "")
+                        # Handle block-level nodes (paragraphs, headings, etc.)
+                        content = node.get("content", [])
+                        if isinstance(content, list):
+                            # For block nodes like paragraphs, join with newlines
+                            if node_type in ("paragraph", "heading", "bulletList", "orderedList"):
+                                return "\n".join(
+                                    extract_text_from_adf(item) for item in content if extract_text_from_adf(item)
+                                )
+                            # For inline nodes, join without separators
+                            return "".join(extract_text_from_adf(item) for item in content)
+                        elif content:
+                            return extract_text_from_adf(content)
+                    if isinstance(node, list):
+                        # Join list items with newlines for better readability
+                        return "\n".join(
+                            extract_text_from_adf(item) for item in node if extract_text_from_adf(item)
+                        )
+                    return ""
+                
+                # Extract text from ADF
+                extracted_text = extract_text_from_adf(description_raw)
+                description = extracted_text.strip() if extracted_text else None
+            elif isinstance(description_raw, str):
+                description = description_raw
+            else:
+                # Fallback: convert to string
+                description = str(description_raw)
 
         # Timestamps
         created = str(fields.get("created", EMPTY_STRING))
